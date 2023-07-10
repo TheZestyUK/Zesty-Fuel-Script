@@ -1,0 +1,104 @@
+--ZestyUK
+
+-- Configuration
+local fuelConsumption = 0.1 -- Adjust the fuel consumption rate as needed
+
+-- Event handler for player entering a vehicle
+RegisterServerEvent('playerEnteredVehicle')
+AddEventHandler('playerEnteredVehicle', function(vehicle)
+    -- Get the player's identifier (Steam ID, license, etc.)
+    local playerIdentifier = GetPlayerIdentifier(source)
+
+    -- Get the current fuel level of the vehicle
+    local currentFuel = GetVehicleFuelLevel(vehicle)
+
+    -- Send the current fuel level to the client
+    TriggerClientEvent('fuel:updateFuelLevel', source, currentFuel)
+
+    -- Store the player's identifier and vehicle information
+    PlayerVehicles[playerIdentifier] = {
+        vehicle = vehicle,
+        fuel = currentFuel
+    }
+end)
+
+-- Event handler for player exiting a vehicle
+RegisterServerEvent('playerExitedVehicle')
+AddEventHandler('playerExitedVehicle', function(vehicle)
+    -- Get the player's identifier
+    local playerIdentifier = GetPlayerIdentifier(source)
+
+    -- Check if the player's vehicle is stored
+    if PlayerVehicles[playerIdentifier] ~= nil then
+        -- Update the fuel level of the vehicle
+        PlayerVehicles[playerIdentifier].fuel = GetVehicleFuelLevel(vehicle)
+    end
+end)
+
+-- Event handler for player refueling at a gas station
+RegisterServerEvent('fuel:refuelVehicle')
+AddEventHandler('fuel:refuelVehicle', function()
+    -- Get the player's identifier
+    local playerIdentifier = GetPlayerIdentifier(source)
+
+    -- Check if the player's vehicle is stored
+    if PlayerVehicles[playerIdentifier] ~= nil then
+        -- Get the vehicle and its current fuel level
+        local vehicle = PlayerVehicles[playerIdentifier].vehicle
+        local currentFuel = PlayerVehicles[playerIdentifier].fuel
+
+        -- Calculate the amount of fuel needed to fill the tank
+        local fuelToAdd = 100 - currentFuel
+
+        -- Increase the fuel level of the vehicle
+        SetVehicleFuelLevel(vehicle, currentFuel + fuelToAdd)
+
+        -- Update the fuel level on the client
+        TriggerClientEvent('fuel:updateFuelLevel', source, currentFuel + fuelToAdd)
+
+        -- Inform the player that the vehicle has been refueled
+        TriggerClientEvent('chat:addMessage', source, {
+            args = { '^*^2FUEL', 'Your vehicle has been refueled!' }
+        })
+    end
+end)
+
+-- Fuel consumption loop
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(10000) -- Adjust the interval as needed
+
+        -- Loop through all the players in the server
+        for _, player in ipairs(GetPlayers()) do
+            -- Get the player's identifier
+            local playerIdentifier = GetPlayerIdentifier(player)
+
+            -- Check if the player's vehicle is stored
+            if PlayerVehicles[playerIdentifier] ~= nil then
+                -- Get the vehicle and its current fuel level
+                local vehicle = PlayerVehicles[playerIdentifier].vehicle
+                local currentFuel = PlayerVehicles[playerIdentifier].fuel
+
+                -- Reduce the fuel level based on consumption rate
+                local newFuel = math.max(currentFuel - fuelConsumption, 0)
+
+                -- Update the fuel level of the vehicle
+                SetVehicleFuelLevel(vehicle, newFuel)
+
+                -- Update the fuel level on the client
+                TriggerClientEvent('fuel:updateFuelLevel', player, newFuel)
+
+                -- Check if the vehicle has run out of fuel
+                if newFuel == 0 then
+                    -- Inform the player that their vehicle is out of fuel
+                    TriggerClientEvent('chat:addMessage', player, {
+                        args = { '^*^1FUEL', 'Your vehicle has run out of fuel!' }
+                    })
+                end
+
+                -- Update the fuel level in the stored data
+                PlayerVehicles[playerIdentifier].fuel = newFuel
+            end
+        end
+    end
+end)
